@@ -83,19 +83,28 @@ def type_refiner(value,key=None):
     """takes the singular item, whatever it is... except for the lists(they are guaranteed)
     ,   and validates its data type (e.g. removes punctuations from numerical items).
     * For the `key`, it is set BACK for future development to an intelligent validator based on the item keyword."""
-    if value == '[':
-        return None #Already sit in a list
-    else:
+    if value in ['[','']:
+        return None, type([]).__name__ #Already sit in a list
+    elif not value.isnumeric():
         for char in value:
-            if char in [c for c in """abcdefghijklmnopqrstuvwxyz!"#$%&'()*+,-./:;<=>?@\\^_`{|}~"""]:
+            if char in [c for c in """abcdefghijklmnopqrstuvwxyz!"#$%&'()*+,./;<=>?@\\^_`{|}~"""]:
                 #NOTE: found this long string from: [string.ascii_lowercase + string.punctuation] \
                 #       and remember... portability, hence no imports ;)
-                return value
-
-    value = value if not value.isnumeric() else int(value)
-
-    return value
-
+                return value, 'varchar'
+            elif char in [':','-']:
+                return value, 'date'
+            else:
+                return value, 'char'
+    else:
+        if '.' in value:
+            value = float(value)
+            return value, type(value).__name__
+        else:
+            value = int(value)
+            return value, type(value).__name__
+# 25/09/2025
+# print('\n\n\n\n\n',k,'\n\n\n\n\n\n')
+    # return value,k
 
 
 with open(input("full_filename: "),'r') as file:# The main header
@@ -103,52 +112,53 @@ with open(input("full_filename: "),'r') as file:# The main header
     JSON_lines = list(filter(lambda x: x.find('{"')          +1\
         ,file.readlines()))#NOTE: searches aloooooooooooooooong the file for JSON records.
 
-    json_balancer_stack = Stack()   # for the counter operation of the JSON elements.
-    json_directive_stack = Stack()  # for validating the pairs positions.
-    json_keys_stack = Stack()       # for column names of the new table.
-    json_values_stack = Stack()     # for values of each column exists in the current JSON line.
+json_balancer_stack = Stack()   # for the counter operation of the JSON elements.
+json_directive_stack = Stack()  # for validating the pairs positions.
+json_keys_stack = Stack()       # for column names of the new table.
+json_values_stack = Stack()     # for values of each column exists in the current JSON line.
 
-    tables_schema = [[] for _ in JSON_lines]    # lists of unique column names to avoid duplication
-    tables_data = [[] for _ in JSON_lines]      # lists of values(even if lists) for each column name in the tables_schema
+tables_schema = [[] for _ in JSON_lines]    # lists of unique column names to avoid duplication
+tables_data = [[] for _ in JSON_lines]      # lists of values(even if lists) for each column name in the tables_schema
+unique_schema = []#25/09/2025
 
-    for table_no, line in enumerate(list(map(lambda x: x.replace('\n','')
+for table_no, line in enumerate(list(map(lambda x: x.replace('\n','')
 #.split(' ',1)[-1].lstrip() #NOTE: this is file-specific operation
     #                                   , like you NOTICE the definition of the ^above^ stacks.
     #                                   So, it is recommended to have me any thing stripped out surrounding the JSON part.
-        ,JSON_lines))):
+    ,JSON_lines))):
     #NOTE: table_no, for the logging and the unique lists.
     
     # The JSON counters:
-        object_CTR = 0; objray_CTR = 0;
-        pair_CTR = 1    #NOTE: because it only counts the delimiters ','.
+    object_CTR = 0; objray_CTR = 0;
+    pair_CTR = 1    #NOTE: because it only counts the delimiters ','.
     
-        line = list(line)
-        for index, token in enumerate(line):#Here is the counter engine starts up!
+    line = list(line)
+    for index, token in enumerate(line):#Here is the counter engine starts up!
         #2. statistics on number of blocks using symbol_stack. 
             
-            if token in ['{','[',',']:
-                json_balancer_stack.push(token)
-                print("at push(with the positional index of the Last_In): ",json_balancer_stack.get(),index) 
-            elif token == ':':
-                json_directive_stack.push(index)
+        if token in ['{','[',',']:
+            json_balancer_stack.push(token)
+            print("at push(with the positional index of the Last_In): ",json_balancer_stack.get(),index) 
+        elif token == ':':
+            json_directive_stack.push(index)
 
-            if (token in ['}',']']) and ( json_balancer_stack.isNotEmpty()):
+        if (token in ['}',']']) and ( json_balancer_stack.isNotEmpty()):
             #NOTE: printing current stats in a '\n' at the pop() stage.
-                print("before pop: ",json_balancer_stack.get(),'\n',object_CTR, pair_CTR, objray_CTR)
+            print("before pop: ",json_balancer_stack.get(),'\n',object_CTR, pair_CTR, objray_CTR)
                 
-                while json_balancer_stack.peek() == ',':
-                        pair_CTR += 1
-                        json_balancer_stack.pop()
-                b = json_balancer_stack.pop()
-                if token == '}' and b == '{':
-                    object_CTR += 1
-                elif token == ']' and b == '[':
-                    objray_CTR += 1
+            while json_balancer_stack.peek() == ',':
+                    pair_CTR += 1
+                    json_balancer_stack.pop()
+            b = json_balancer_stack.pop()
+            if token == '}' and b == '{':
+                object_CTR += 1
+            elif token == ']' and b == '[':
+                objray_CTR += 1
 
-                print("after pop: ",json_balancer_stack.get(),'\n',object_CTR, pair_CTR, objray_CTR)
+            print("after pop: ",json_balancer_stack.get(),'\n',object_CTR, pair_CTR, objray_CTR)
 
-        print('\n\nFinal stats of the json content (total_n(objects), n(pairs), total_n(arrays)):\n',
-                    object_CTR, pair_CTR,  objray_CTR)
+    print('\n\nFinal stats of the json content (total_n(objects), n(pairs), total_n(arrays)):\n',
+                object_CTR, pair_CTR,  objray_CTR)
 
         #///////////////    Here is the counter engine turns OFF!   \\\\\\\\\\\\\\\\\\\\
 
@@ -157,144 +167,177 @@ with open(input("full_filename: "),'r') as file:# The main header
 # line.remove(c)            #NOTE: but what about Map ?! =)  Here we go:-
 
     # 3-1. filtering braces and commas.
-        mapped_lines = ''.join(list(map(lambda x: x+'\n' if x in ['[',']','{','}',','] else x,line)))
+    mapped_lines = ''.join(list(map(lambda x: x+'\n' if x in ['[',']','{','}',','] else x,line)))
 # refined_line = list(filter(lambda x: len(x.strip()) > 1 or x == ' ',mapped_line.split('\n')))      DEPRECATED!
 
 
-        colon_flag = True           #NOTE: validation process of pairs positions
-        for i,v in enumerate(line):
-            if v == ':' and colon_flag:
-                colon_flag = i in json_directive_stack.get()
-                print('actual_index: ',i, 'w.r.t predicted: ',colon_flag)
-            else:
-                break
-        input(f"######## : INDEXES ARE {colon_flag}! #######\n Press `Enter` or `Ctrl+c` accordingly:");
+    colon_flag = True           #NOTE: validation process of pairs positions
+    for i,v in enumerate(line):
+        if v == ':' and colon_flag:
+            colon_flag = i in json_directive_stack.get()
+            print('actual_index: ',i, 'w.r.t predicted: ',colon_flag)
+        elif not colon_flag:
+            break
+    input(f"######## : INDEXES ARE {colon_flag}! #######\n Press `Enter` or `Ctrl+c` accordingly:");
 
-        json_keys_stack = Stack();  json_values_stack = Stack()
+    json_keys_stack = Stack();  json_values_stack = Stack()
 
-        k_arr_idx = -1 # for checking the 0 position of nested JSON objects
+    k_arr_idx = -1 # for checking the 0 position of nested JSON objects
 
-        arr_key = None                     ;   arr_value = None
+    arr_key = None                     ;   arr_flag = None
         #NOTE: they are FLAGS to decide the parsing whether to turn to normal list or list of objects(dictionaries)
-       #arr_key: refers to the dicts       ,   arr_value: refers to singular values
+       #arr_key: refers to the dicts       ,   arr_flag: refers to singular values
         
-        val_arr = []# to combine the values of the normal list into one element during the parsing process, 
+    val_arr = []# to combine the values of the normal list into one element during the parsing process, 
         #which in turn belongs to the same key.
 
+    sub_object_CTR = 1#25/09/2025
 
         # 3-2. split into keys, values stacks.
-        for sub_way in mapped_lines[1:-2].split(','):
+    for sub_way in mapped_lines[1:-2].split(','):
 #'\n'.join(refined_line)
 
             #Hey, isn't the following a pipeline =) ?!
-            sub_way = sub_way\
-                                .replace('{','').replace('}','')\
-                                                                .replace('\n','')
+        sub_way = sub_way\
+                            .replace('{','').replace('}','')\
+                                                            .replace('\n','')
             #NOTE: but for ], [ and :  >> they are used for the lists parsing
 
-            pairs = sub_way.split(':',1)#NOTE: cAuTiOn, for misleading text, hold only on the 1st occurrence.
-            k = False
-            #NOTE: This is because the current `sub_way` may not contain the splitter ':'
-            if len(pairs) > 1:
-                k,v = pairs
-            else:
-                v = pairs[0] #NOTE: taking it as a normal string, because split() returns a list object.
+        pairs = sub_way.split(':',1)#NOTE: cAuTiOn, for misleading text, hold only on the 1st occurrence.
+        k = False
+        #NOTE: This is because the current `sub_way` may not contain the splitter ':'
+        if len(pairs) > 1:
+            k,v = pairs
+        else:
+            v = pairs[0] #NOTE: taking it as a normal string, because split() returns a list object.
 
     #TODO: intelli_type data refiner!!!
 # type_refiner(k,v) #i.e. based on the key namespace
-            
-            if (v.find('["')                             +1):
-                if (v.find(':')                             +1):
-                #List of dictionaries
-                    k,v = v.split(':')
-                    arr_value = None
-                    arr_key = k
+
+        if (v.find('["')                             +1):
+            k += '[]'
+            if (v.find(':')                             +1):
+            #List of dictionaries
+                k2,v = v.split(':')
+                arr_flag = None
+                k = k#.replace('[','')
+                arr_key = k.lstrip()
+                k = k2.replace('[','')
 
 #json_keys_stack.pop()
 # k = (arr_key + '| ' + k.lstrip()).replace('[','')
 # json_keys_stack.push(k.strip().replace('\n','').replace('[',''))
 
-                    k_arr_idx = json_keys_stack.get().index(json_keys_stack.peek()) +1
-                    print(v,"k_arr_idx: ",k_arr_idx)
+                k_arr_idx = json_keys_stack.get().index(json_keys_stack.peek()) +1
+                print(v,"k_arr_idx: ",k_arr_idx)
 
-                else:
+            else:
                 #List of values
-                    arr_key = None
-                    v = v.lstrip().replace('[','')
-                    arr_value = json_keys_stack.peek()
+                arr_key = None
+                v = v.lstrip()
+                arr_flag = True
                     
-            if v.find('"]')                             +1:
-                #Close down ANY special parsing:
-                    arr_key = None
-                    if arr_value:
-                        v = val_arr + [v]
-# json_values_stack.push()
-                    arr_value = None
-                    val_arr = []
-# continue
-            
-            if arr_value:#NOTE: The accumulator of the list object.
-                val_arr += [v]
-                
-            if k:#NOTE: Recall the `if len(pairs)`
-                json_keys_stack.push(
-                    (((((((((((((((((((((((((f'{arr_key}| ' if arr_key else ''))))))))))))))))))))))))) +
+     #BIG NOTICE: `strip()` is the most common operation along the conditions than `replace()`, because it impacts only the char itself, like the Stack, can't get among the values(just the two ends)!!!
+
+        if k:#NOTE: Recall the `if len(pairs)`
+            json_keys_stack.push(
+                (((((((((((((((((((((((((f'{arr_key}| ' if arr_key else ''))))))))))))))))))))))))) +
                     #NOTE: This is like the `find()                 +1`
                     #                                                 because I frequently forget to add 1*
             #Because, if this part is added at the end without (), the `else` part is the only considered parameter value
-                                    k.lstrip()
-                                            .replace('\n','').replace('[','')
-                                )
+                                k.lstrip()
+                                        .replace('\n','').replace('"','')
+                            )
+                
+            
+
+        if v.find('"]')                             +1:
+            #Close down ANY special parsing:                    
+                b_key = []
+                for i in range(sub_object_CTR):
+                    b_key += [json_keys_stack.pop().replace('[]',f'[{sub_object_CTR}]')]
+                       #NOTE instead of slicing, then adding the length, because that key by any fault may NOT have the `[]`, so the function returns INTACT!
+                for b in b_key:
+                    json_keys_stack.push(b.replace('"',''))
+
+                arr_key = None
+                sub_object_CTR = 1
+
+                if arr_flag:#NOTE: for the last element, 
+                        # like similar problems where the loop neglects the last elment right at the condition negativity*
+                    v = val_arr + [v]
+                    b_val = json_keys_stack.pop().replace('[]',f'[{len(v)}]')
+                        #NOTE instead of slicing, then adding the length, because that key by any fault may NOT have the `[]`, so the function returns INTACT!
+                    json_keys_stack.push(b_val)
+
+# json_values_stack.push()
+                arr_flag = None
+                val_arr = []
+# continue
+            
+        if arr_key:
+            sub_object_CTR += 1
+
+        if arr_flag:#NOTE: The accumulator of the list object.
+#: was thought of just an extra assertion  ok?
+            val_arr += [v]
+            continue
 
         # 3-3. refine the type for each column to its value in-place.
-            v = type_refiner(str(v).lstrip()
-                                            .replace('\n','')
-                                                            .replace('"','').replace(']','')                                             
-                            )#Native type validator.
-            json_values_stack.push(v)
+        v = type_refiner(str(v).lstrip()
+                                        .replace('\n','').replace('"','')
+                                                                        .replace(']','').replace('[','')                                          
+                        ,k)[0]#Native type validator.
+        json_values_stack.push(v)
             
 # if '[' in list(v):
 #     v += ']'     
 
-# json_values_stack.push(v)# if (not arr_value) else list(json_values_stack.pop())+[v])
+# json_values_stack.push(v)# if (not arr_flag) else list(json_values_stack.pop())+[v])
 
-        while json_values_stack.size() > pair_CTR:
+    while json_values_stack.size() > pair_CTR:
 # print(json_values_stack.size())
-            json_values_stack.pop();#NOTE: This for redundancy. ok?
-        print('\n\n First look at the ET table: _duplicates exist_*\n\n')
-        print((json_keys_stack.get()),'\n', json_values_stack.get())
-        print('First stats: ', json_keys_stack.size(), json_values_stack.size())
+        json_values_stack.pop();#NOTE: This for redundancy. ok?
+    print('\n\n First look at the ETed table: _duplicates exist_*\n\n')
+    print((json_keys_stack.get()),'\n', json_values_stack.get())
+    print('First stats: ', json_keys_stack.size(), json_values_stack.size())
 
 
         #NOTE: Loading phase: with duplicates removal*
         # 4. collect unique(col_name), corresponding list of values for each.
-        for element in json_keys_stack.get():
-# [::-1]
-
-            if (not len(tables_schema[table_no])) or (element not in tables_schema[table_no]):
-                tables_schema[table_no] += [element]
+    for element in json_keys_stack.get():
+# [::-1]            
+        if (not len(tables_schema[table_no])) or (element not in tables_schema[table_no]):
+            tables_schema[table_no] += [element]
                 # print(tables_schema[table_no][-1],element)
-            
-        print('\n\n',f"tables_schema ({len(tables_schema[table_no])}): ",tables_schema[table_no])
+    for col in tables_schema[table_no]:
+        if col not in unique_schema:#25/09/2025
+            unique_schema += [col]        
+    print('\n\n',f"tables_schema ({len(tables_schema[table_no])}): ",tables_schema[table_no])
 
         # for val in json_values_stack.get():
-        for col in tables_schema[table_no]:
-            tables_data[table_no].append([json_values_stack.get()[i] for i,v in enumerate(json_keys_stack.get()) if v == col])
+    for col in tables_schema[table_no]:
+        tables_data[table_no].append([json_values_stack.get()[i] for i,v in enumerate(json_keys_stack.get()) if v == col])
 
-        max_len = 0
+    max_len = 0
         #5. make all lists of values equal_len by `None` padding.
-        for sub_t in range(len(tables_data[table_no])):
-            element = tables_data[table_no][sub_t]
-            if len(element) < max_len:
-                while len(tables_data[table_no][sub_t]) < max_len:
-                    tables_data[table_no][sub_t] += [None]
+    for sub_t in range(len(tables_data[table_no])):
+        element = tables_data[table_no][sub_t]
+        if len(element) < max_len:
+            while len(tables_data[table_no][sub_t]) < max_len:
+                tables_data[table_no][sub_t] += [None]
                     #NOTE: filling the empty lists or missing values with None*(max_len of the longest list)
-            else:
-                max_len = len(element)
+        else:
+            max_len = len(element)
 
-        print('\n\n',f"tables_data ({len(tables_data[table_no])*max_len}) {max_len}items/key: ",tables_data[table_no])
+    print('\n\n',f"tables_data ({len(tables_data[table_no])*max_len}) {max_len} item(s)/key: ",tables_data[table_no])
 
-        print('\n__________\n',f"End of JSON record: {table_no}!",'\n__________\n')
+
+    print('\n__________\n',f"End of JSON record: {table_no}!",'\n__________\n')
+
+print(tables_schema,[len(i) for i in tables_schema], len(unique_schema))#25/09/2025
+print(tables_data)
+
 
 # /****************************************************************************************************BIG TIME
 def json_parser(parent_block):
@@ -340,16 +383,4 @@ Have fun!
 
 # `jp` shell command .......... TBC
 # TODO: _Use Shell Scripts to Increase Portability_
-# -------------------------------------------------------------------
-
-
-
-#The following is from: Ahmed Tonsy 
-# -------------------------------------------------------------------
-# # IV. LOAD
-# # new schema of (corrected names, corrected types, structured JSON columns(in subtable for 1st degree of normalization), new parent table at the end)
-# # -------------------------------------------------------------------
-# df.to_sql("items", target_engine, if_exists="append", index=False)
-
-# print(f"✅ Loaded {len(df)} rows into transformed_data")
-#  
+# ------------------------------------------------------------------- 
